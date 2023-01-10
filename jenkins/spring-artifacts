@@ -1,0 +1,68 @@
+pipeline {
+    agent any
+    stages {
+        stage('Source Code') {
+            steps {
+                git url: 'https://github.com/GitPracticeRepo/spring-petclinic.git',
+                branch: 'main'
+            }
+        }
+        stage('Artifactory-Configuration') {
+            steps {
+                rtMavenDeployer (
+                    id: 'declarative',
+                    serverId: 'declarative',
+                    releaseRepo: 'libs-release-local',
+                    snapshotRepo: 'libs-snapshot-local',
+                    deployArtifacts: true,
+                )
+            }
+        }
+        stage('Build the Code') {
+            steps {
+                rtMavenRun (
+                    // Tool name from Jenkins configuration.
+                    tool: 'Maven',
+                    pom: 'pom.xml',
+                    goals: 'clean package deploy',
+                    // Maven options.
+                    deployerId: 'declarative',
+                )
+            }
+        }
+        stage ('test results') {
+            steps {
+                junit '**/target/surefire-reports/*.xml'
+            }
+        }
+        stage ('art results') {
+            steps {
+                archiveArtifacts artifacts: '**/target/spring-petclinic*.jar', followSymlinks: false
+            }
+        }
+    }
+}
+
+pipeline {
+    agent any
+    options {
+        copyArtifactPermission('spring');
+    }
+    stages {
+        stage ('Build') {
+            steps {
+                build job: 'spring'
+            }
+        }
+        stage('Copy Archive') {
+         steps {
+             script {
+                step ([$class: 'CopyArtifact',
+                    projectName: 'spring',
+                    filter: "**/target/spring-petclinic-*.jar",
+                    target: 'spring']);
+            }
+        }
+    }
+    }
+}
